@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 #### WIP!
+=======
+#### WIP! 
+>>>>>>> 05b1051 (add GBPUSD pair start time)
 As I never encountered such information in public, I recon this could be useful to more users. Below is a table with all the pairs currently traded on Bitstamp with exact time to minute's precision on when each pair has started trading.
 |pair|timestamp|unix timestamp|
 |---|---|---|
@@ -26,3 +30,7 @@ XLMBTC|2020-05-28 10:53:00|1590663180
 XLMUSD|2020-05-28 11:31:00|1590665460
 XLMEUR|2020-05-28 11:15:00|1590664500
 XLMGBP|2020-05-28 13:13:00|1590671580
+<<<<<<< HEAD
+=======
+GBPUSD|2020-05-28 12:28:00|1590658080
+>>>>>>> 05b1051 (add GBPUSD pair start time)
