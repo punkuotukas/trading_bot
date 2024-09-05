@@ -1,5 +1,5 @@
 #### WIP!
-As I never encountered such information in public, I recon this could be useful to more users. Below is a table with all the pairs currently traded on Bitstamp with exact time to minute's precision on when each pair has started trading.
+As I never encountered such information in public, I recon this could be useful to more users. Below is a table with all the pairs currently traded on Bitstamp with exact time to minute's precision on when each pair has started trading. This basically means that the timestamp indicates the start of the 1st candle of trading for each pair.
 
 ||pair|timestamp GMT+03:00|unix timestamp
 |---|---|---|---|
