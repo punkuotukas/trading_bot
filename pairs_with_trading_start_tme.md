@@ -1,7 +1,7 @@
 #### WIP!
 As I never encountered such information in public, I recon this could be useful to more users. Below is a table with all the pairs currently traded on Bitstamp with exact time to minute's precision on when each pair has started trading.
 
-||pair|timestamp|unix timestamp
+||pair|timestamp GMT+03:00|unix timestamp
 |---|---|---|---|
 1|XRPEUR|2017-01-03 12:07:00|1483445220
 2|XRPUSD|2016-12-16 15:34:00|1481902440
