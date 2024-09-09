@@ -1,16 +1,30 @@
 import os
-from sqlalchemy import text, create_engine
+from sqlalchemy import text, create_engine, URL
 import requests
 import time
 from dotenv import load_dotenv
 
 load_dotenv()
 
-engine_dict = {
-    'prefix':'postgresql+psycopg2://',
-    'psql_user': os.getenv('PSQL_USER'),
-    'psql_password': os.getenv('PSQL_PASSWORD'),
-    'db_host': os.getenv('DB_HOST'),
-    'db_port': os.getenv('DB_PORT'),
-    'db_name': os.getenv('DB_NAME')
+# url_dict = URL.create(
+#     "postgresql+psycopg2",
+#     username=os.getenv('PSQL_USER'),
+#     password=os.getenv('PSQL_PASSWORD'),
+#     host=os.getenv('DB_HOST'),
+#     port=os.getenv('DB_PORT'),
+#     database=os.getenv('DB_NAME')
+# )
+
+url_dict = {
+    "drivername":"postgresql+psycopg2",
+    "username":os.getenv('PSQL_USER'),
+    "password":os.getenv('PSQL_PASSWORD'),
+    "host":os.getenv('DB_HOST'),
+    "port":os.getenv('DB_PORT'),
+    "database":os.getenv('DB_NAME')
 }
+
+db_url = URL.create(drivername=url_dict['drivername'], query=url_dict)
+
+engine = create_engine(db_url)
+engine.begin()
