@@ -6,15 +6,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# url_dict = URL.create(
-#     "postgresql+psycopg2",
-#     username=os.getenv('PSQL_USER'),
-#     password=os.getenv('PSQL_PASSWORD'),
-#     host=os.getenv('DB_HOST'),
-#     port=os.getenv('DB_PORT'),
-#     database=os.getenv('DB_NAME')
-# )
-
 url_dict = {
     "drivername":"postgresql+psycopg2",
     "username":os.getenv('PSQL_USER'),
