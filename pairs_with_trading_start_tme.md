@@ -20,7 +20,7 @@ As I never encountered such information in public, I recon this could be useful 
 16|XLM/BTC|2020-05-28 10:53:00|1590663180
 17|XLM/EUR|2020-05-28 11:15:00|1590664500
 18|XLM/USD|2020-05-28 11:31:00|1590665460
-19|PAX/USD|2020-05-28 11:42:00|1590655320
+<font color="red">19<font>|<font color="red">PAX/USD</font>|<font color="red">2020-05-28 11:42:00</font>|<font color="red">1590655320</font>
 20|GBP/USD|2020-05-28 12:28:00|1590658080
 21|BTC/GBP|2020-05-28 12:40:00|1590669600
 22|ETH/GBP|2020-05-28 12:56:00|1590670560
