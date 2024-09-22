@@ -4,7 +4,9 @@ import os
 from dotenv import load_dotenv
 import requests
 import datetime
+import time
 import pytz
+import numpy as np
 
 load_dotenv()
 
@@ -19,7 +21,7 @@ sql_dict = {
 psycopg_conn_str = f"dbname={sql_dict['database']} user={sql_dict['username']} password={sql_dict['password']} host={sql_dict['host']} port={sql_dict['port']}"
 
 cur_time = datetime.datetime.now(pytz.timezone("Europe/Vilnius")).replace(microsecond=0)
-
+cur_unix_time = int(time.mktime(cur_time.timetuple()))
 
 # ? gets all pair urls from database and returns them as pandas dataframe with single column "pairs"
 def retrieve_pair_urls_from_db():
@@ -70,9 +72,20 @@ def update_db_pairs_status_based_on_api_data():
     WHERE pair_url = %(pair)s;
     """
     df = retrieve_trading_status_from_db()
+    enabled_db_pairs = df.loc[df["status"] == True, "pairs"].to_list()
     resp = requests.get(api_url)
     api_results = resp.json()
     api_pairs_list = [pair["url_symbol"] for pair in api_results if pair is not None]
+    if len(api_pairs_list) > len(enabled_db_pairs):
+        new_pairs_list = []
+        print("New trading pairs have been launched")
+        new_pairs = set(api_pairs_list) - set(enabled_db_pairs)
+        print("New pairs are the following:")
+        print(new_pairs)
+        for pair in api_results:
+            if pair["url_symbol"] in new_pairs:
+                new_pairs_list.append(pair)
+        insert_newly_traded_pairs_to_db(new_pairs_list)
     for pair in api_results:
         df_pair_status = df.loc[df["pairs"] == pair["url_symbol"], "status"].values[0]
         if pair["trading"] == "Enabled" and df_pair_status == True:
@@ -95,6 +108,7 @@ def update_db_pairs_status_based_on_api_data():
                     },
                 )
                 conn.commit()
+            print(f"Trading status updated for: {pair["name"]}")
             status_updates.append(pair["name"])
     [disabled_pairs.append(pair) for pair in df["pairs"] if pair not in api_pairs_list]
     for pair in disabled_pairs:
@@ -110,6 +124,21 @@ def update_db_pairs_status_based_on_api_data():
         print("No changes in trading status since last check.")
     return disabled_pairs
 
+#? In case during trading status for pairs check new pairs are detected, this function will insert them into bitstamp_trading_pairs table
+def insert_newly_traded_pairs_to_db(new_pairs):
+    insert_new_pair_query = """--sql
+    INSERT into bitstamp_trading_pairs(pair, start_timestamp, unix_timestamp, pair_url, trading_enabled, "description", minimum_order)
+    VALUES (%(pair_name)s, %(start_timestamp)s, %(unix_timestamp)s, %(pair_url)s, TRUE, %(description)s, %(minimum_order)s)
+    """
+    for pair in new_pairs:
+        pair["start_timestamp"] = cur_time
+        pair["unix_timestamp"] = cur_unix_time
+        with psycopg2.connect(psycopg_conn_str) as conn:
+            cur = conn.cursor()
+            cur.execute(insert_new_pair_query, {"pair_name":pair["name"], "start_timestamp":pair["start_timestamp"], "unix_timestamp":pair["unix_timestamp"], "pair_url":pair["url_symbol"], "description":pair["description"], "minimum_order":pair["minimum_order"]})
+            conn.commit()
+            cur.close()
+        print(f"pair {pair["name"]} has been added to database table")
 
 def check_pairs_status():
     disabled_pairs = update_db_pairs_status_based_on_api_data()
