@@ -6,7 +6,6 @@ import requests
 import datetime
 import time
 import pytz
-import numpy as np
 
 load_dotenv()
 
@@ -157,6 +156,7 @@ def check_pairs_status():
             )
             conn.commit()
             cur.close()
+        print(f"Trading status has been set to 'DISABLED' for: {disabled_pairs[0]}")
     elif len(disabled_pairs) > 1:
         for i in range(len(disabled_pairs)):
             with psycopg2.connect(psycopg_conn_str) as conn:
@@ -167,6 +167,7 @@ def check_pairs_status():
                 )
                 cur.close()
             del disabled_pairs[0]
+            print(f"Trading status has been set to 'DISABLED' for: {disabled_pairs[0]}")
 
 
-update_db_pairs_status_based_on_api_data()
+check_pairs_status()
