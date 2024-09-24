@@ -1,2 +1,6 @@
 .env
 env/*
+notebooks/*
+.virtual_documents/*
+.vscode
+*.ipynb
