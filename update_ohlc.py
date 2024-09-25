@@ -8,6 +8,12 @@ import pandas as pd
 
 load_dotenv()
 
+curr_time = datetime.now()
+curr_unix_time = int(datetime.timestamp(curr_time))
+to_int = lambda x: int(x)
+to_float = lambda x: float(x)
+to_timestamp = lambda x: pd.Timestamp(x, unit="s", tz="Europe/Vilnius")
+
 url_dict = {
     "username": os.getenv("PSQL_USER"),
     "password": os.getenv("PSQL_PASSWORD"),
@@ -18,10 +24,12 @@ url_dict = {
 
 psycopg_conn_str = f"dbname={url_dict['database']} user={url_dict['username']} password={url_dict['password']} host={url_dict['host']} port={url_dict['port']}"
 
+sqlalchemy_conn_str = f"postgresql+psycopg://{url_dict['username']}:{url_dict['password']}@{url_dict['host']}:{url_dict['port']}/{url_dict['database']}"
+
 
 def fetch_pairs_from_db(connection):
     retrieve_pairs_query = """--sql
-    SELECT pair_url FROM bitstamp_trading_pairs WHERE trading_enabled = TRUE;
+    SELECT unique_pair_id, pair_url FROM bitstamp_trading_pairs WHERE trading_enabled = TRUE;
     """
     with psycopg2.connect(connection) as conn:
         cur = conn.cursor()
@@ -29,7 +37,7 @@ def fetch_pairs_from_db(connection):
         results = cur.fetchall()
         cur.close()
     pairs_df = pd.DataFrame(results)
-    pairs_df.rename(columns={0: "pair_url"}, inplace=True)
+    pairs_df.rename(columns={0: "unique_pair_id", 1: "pair_url"}, inplace=True)
     return pairs_df
 
 
@@ -45,7 +53,8 @@ def get_pair_latest_candle_timestamp(pair_url, db_connection):
         )
         results = cur.fetchone()[0]
         cur.close()
-    return results
+        unix_results = int(datetime.timestamp(results))
+    return unix_results
 
 
 def fetch_bitstamp_ohlc(
@@ -81,4 +90,49 @@ pairs_df["last_timestamp"] = pairs_df["pair_url"].apply(
 )
 
 to_unix = lambda x: int(datetime.timestamp(x))
-pairs_df["last_timestamp"] = pairs_df["last_timestamp"].apply(to_unix)
+
+
+def get_new_ohlc(market_symbol, start):
+    ohlc_list = []
+    while start < curr_unix_time - 60:
+        resp = requests.get(
+            f"https://www.bitstamp.net/api/v2/ohlc/{market_symbol}",
+            params={
+                "step": 60,
+                "limit": 1000,
+                "start": start,
+                "exclude_current_candle": True,
+            },
+        )
+        results = resp.json()
+        ohlc = results["data"]["ohlc"]
+        for dict in ohlc:
+            ohlc_list.append(dict)
+        start = start + 60000
+    return ohlc_list
+
+
+def iterate_through_pairs_df_for_new_data():
+    pairs_df = fetch_pairs_from_db(psycopg_conn_str)
+    pairs_df["last_timestamp"] = pairs_df["pair_url"].apply(
+        lambda x: get_pair_latest_candle_timestamp(x, psycopg_conn_str)
+    )
+    for row in pairs_df.iterrows():
+        pair_url = row[1].values[1]
+        start = row[1].values[2] + 60
+        new_ohlc = get_new_ohlc(market_symbol=pair_url, start=start)
+        new_ohlc_df = pd.DataFrame(new_ohlc)
+        new_ohlc_df["timestamp"] = new_ohlc_df["timestamp"].apply(to_int)
+        new_ohlc_df["high"] = new_ohlc_df["high"].apply(to_float)
+        new_ohlc_df["open"] = new_ohlc_df["open"].apply(to_float)
+        new_ohlc_df["low"] = new_ohlc_df["low"].apply(to_float)
+        new_ohlc_df["close"] = new_ohlc_df["close"].apply(to_float)
+        new_ohlc_df["volume"] = new_ohlc_df["volume"].apply(to_float)
+        new_ohlc_df["timestamp"] = new_ohlc_df["timestamp"].apply(to_timestamp)
+        new_ohlc_df["unique_pair_id"] = row[1].values[0]
+        new_ohlc_df.to_sql(
+            f"ohlc_{pair_url}", sqlalchemy_conn_str, if_exists="append", index=False
+        )
+
+
+iterate_through_pairs_df_for_new_data()
