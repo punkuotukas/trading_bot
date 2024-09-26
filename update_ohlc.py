@@ -130,6 +130,7 @@ def iterate_through_pairs_df_for_new_data():
         new_ohlc_df["volume"] = new_ohlc_df["volume"].apply(to_float)
         new_ohlc_df["timestamp"] = new_ohlc_df["timestamp"].apply(to_timestamp)
         new_ohlc_df["unique_pair_id"] = row[1].values[0]
+        print(f"Updating database for: {row[1].values[0]} {pair_url}")
         new_ohlc_df.to_sql(
             f"ohlc_{pair_url}", sqlalchemy_conn_str, if_exists="append", index=False
         )
