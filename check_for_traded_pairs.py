@@ -25,7 +25,7 @@ cur_unix_time = int(time.mktime(cur_time.timetuple()))
 # ? gets all pair urls from database and returns them as pandas dataframe with single column "pairs"
 def retrieve_pair_urls_from_db():
     query_all_trading_pairs = """--sql
-    SELECT pair_url FROM bitstamp_trading_pairs;
+    SELECT pair_url FROM bitstamp_pairs;
     """
 
     with psycopg2.connect(psycopg_conn_str) as conn:
@@ -42,7 +42,7 @@ def retrieve_pair_urls_from_db():
 def retrieve_trading_status_from_db():
     get_pairs_info_query = """--sql
     SELECT pair_url, trading_enabled, last_checked_for_trading
-    FROM bitstamp_trading_pairs;
+    FROM bitstamp_pairs;
     """
 
     with psycopg2.connect(psycopg_conn_str) as conn:
@@ -60,12 +60,12 @@ def update_db_pairs_status_based_on_api_data():
     status_updates = []
     disabled_pairs = []
     update_db_check_status_query = """--sql
-    UPDATE bitstamp_trading_pairs
+    UPDATE bitstamp_pairs
     SET last_checked_for_trading = %(cur_time)s
     WHERE pair_url = %(pair)s;
     """
     update_db_check_and_trading_status_query = """--sql
-    UPDATE bitstamp_trading_pairs
+    UPDATE bitstamp_pairs
     SET last_checked_for_trading = %(cur_time)s,
         trading_enabled = %(trading_status)s
     WHERE pair_url = %(pair)s;
@@ -82,9 +82,15 @@ def update_db_pairs_status_based_on_api_data():
         print("New pairs are the following:")
         print(new_pairs)
         for pair in api_results:
-            if pair["url_symbol"] in new_pairs:
+            if pair['url_symbol'] in new_pairs:
                 new_pairs_list.append(pair)
         insert_newly_traded_pairs_to_db(new_pairs_list)
+        for pair in api_results:
+            if pair["url_symbol"] in new_pairs:
+                new_pairs_list.append(pair)
+                pair_df_dict = pd.DataFrame({'pairs': [pair['url_symbol']], 'status':[pair['trading']], 'last_checked':[cur_time]})
+                df = pd.concat([df, pair_df_dict], ignore_index=True)
+                create_new_pair_table(psycopg_conn_str, pair["url_symbol"])
     for pair in api_results:
         df_pair_status = df.loc[df["pairs"] == pair["url_symbol"], "status"].values[0]
         if pair["trading"] == "Enabled" and df_pair_status == True:
@@ -123,10 +129,10 @@ def update_db_pairs_status_based_on_api_data():
         print("No changes in trading status since last check.")
     return disabled_pairs
 
-#? In case during trading status for pairs check new pairs are detected, this function will insert them into bitstamp_trading_pairs table
+#? In case during trading status for pairs check new pairs are detected, this function will insert them into bitstamp_pairs table
 def insert_newly_traded_pairs_to_db(new_pairs):
     insert_new_pair_query = """--sql
-    INSERT into bitstamp_trading_pairs(pair, start_timestamp, unix_timestamp, pair_url, trading_enabled, "description", minimum_order)
+    INSERT into bitstamp_pairs(pair, start_timestamp, unix_timestamp, pair_url, trading_enabled, "description", minimum_order)
     VALUES (%(pair_name)s, %(start_timestamp)s, %(unix_timestamp)s, %(pair_url)s, TRUE, %(description)s, %(minimum_order)s)
     """
     for pair in new_pairs:
@@ -139,10 +145,43 @@ def insert_newly_traded_pairs_to_db(new_pairs):
             cur.close()
         print(f"pair {pair["name"]} has been added to database table")
 
+def create_new_pair_table(connection, pair):
+    table_name = f"ohlc_{pair}"
+    create_table_query = f"""--sql
+    CREATE TABLE IF NOT EXISTS {table_name} (
+    unique_pair_id INT,
+    "timestamp" TIMESTAMPTZ not null,
+    "open" NUMERIC(20, 12),
+    high NUMERIC(20, 12),
+    low NUMERIC(20, 12),
+    "close" NUMERIC(20, 12),
+    volume NUMERIC(28, 12)
+    );
+    """
+    create_hypertable_query = f"""--sql
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+        SELECT 1
+        FROM timescaledb_information.hypertables
+        WHERE hypertable_name = 'ohlc_{pair}'
+        ) THEN
+            PERFORM create_hypertable('ohlc_{pair}', by_range('timestamp'));
+        END IF;
+    END $$;
+    """
+    with psycopg2.connect(connection) as conn:
+        cur = conn.cursor()
+        cur.execute(create_table_query)
+        cur.execute(create_hypertable_query)
+        conn.commit()
+        print(f"New DB table created for {pair}")
+        cur.close()
+
 def check_pairs_status():
     disabled_pairs = update_db_pairs_status_based_on_api_data()
     update_trading_status_query = """--sql
-        update bitstamp_trading_pairs
+        update bitstamp_pairs
         set trading_enabled = FALSE,
         last_checked_for_trading = %(cur_time)s
         where pair_url = %(pair)s;

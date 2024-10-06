@@ -5,6 +5,8 @@ import requests
 from datetime import datetime
 from dotenv import load_dotenv
 import pandas as pd
+import pytz
+from find_start_timestamp import FindStartTimestamp
 
 load_dotenv()
 
@@ -29,7 +31,7 @@ sqlalchemy_conn_str = f"postgresql+psycopg://{url_dict['username']}:{url_dict['p
 
 def fetch_pairs_from_db(connection):
     retrieve_pairs_query = """--sql
-    SELECT unique_pair_id, pair_url FROM bitstamp_trading_pairs WHERE trading_enabled = TRUE;
+    SELECT unique_pair_id, pair_url FROM bitstamp_pairs WHERE trading_enabled = TRUE;
     """
     with psycopg2.connect(connection) as conn:
         cur = conn.cursor()
@@ -53,7 +55,18 @@ def get_pair_latest_candle_timestamp(pair_url, db_connection):
         )
         results = cur.fetchone()[0]
         cur.close()
-        unix_results = int(datetime.timestamp(results))
+        if results is None:
+            finder = FindStartTimestamp()
+            results = int(finder.find_starting_timestamp(pair_url, new_pair=True))
+            human_datetime = datetime.fromtimestamp(
+                results, tz=pytz.timezone("Europe/Vilnius")
+            )
+            finder.update_start_timestamp_in_main_table(
+                human_datetime, results, db_connection, pair_url
+            )
+            unix_results = results
+        else:
+            unix_results = int(datetime.timestamp(results))
     return unix_results
 
 
