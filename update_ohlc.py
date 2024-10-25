@@ -108,15 +108,25 @@ to_unix = lambda x: int(datetime.timestamp(x))
 def get_new_ohlc(market_symbol, start):
     ohlc_list = []
     while start < curr_unix_time - 60:
-        resp = requests.get(
-            f"https://www.bitstamp.net/api/v2/ohlc/{market_symbol}",
-            params={
-                "step": 60,
-                "limit": 1000,
-                "start": start,
-                "exclude_current_candle": True,
-            },
-        )
+        try:
+            resp = requests.get(
+                f"https://www.bitstamp.net/api/v2/ohlc/{market_symbol}",
+                params={
+                    "step": 60,
+                    "limit": 1000,
+                    "start": start,
+                    "exclude_current_candle": True,
+                },
+            )
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            print(f"Bad status code for {market_symbol}")
+            if resp.status_code == 404:
+                print(f"Setting pair {market_symbol} trading status to DISABLED")
+                set_trading_status_to_disabled(market_symbol)
+                return
+            else:
+                pass
         results = resp.json()
         ohlc = results["data"]["ohlc"]
         for dict in ohlc:
@@ -134,19 +144,35 @@ def iterate_through_pairs_df_for_new_data():
         pair_url = row[1].values[1]
         start = row[1].values[2] + 60
         new_ohlc = get_new_ohlc(market_symbol=pair_url, start=start)
-        new_ohlc_df = pd.DataFrame(new_ohlc)
-        new_ohlc_df["timestamp"] = new_ohlc_df["timestamp"].apply(to_int)
-        new_ohlc_df["high"] = new_ohlc_df["high"].apply(to_float)
-        new_ohlc_df["open"] = new_ohlc_df["open"].apply(to_float)
-        new_ohlc_df["low"] = new_ohlc_df["low"].apply(to_float)
-        new_ohlc_df["close"] = new_ohlc_df["close"].apply(to_float)
-        new_ohlc_df["volume"] = new_ohlc_df["volume"].apply(to_float)
-        new_ohlc_df["timestamp"] = new_ohlc_df["timestamp"].apply(to_timestamp)
-        new_ohlc_df["unique_pair_id"] = row[1].values[0]
-        print(f"Updating database for: {row[1].values[0]} {pair_url}")
-        new_ohlc_df.to_sql(
-            f"ohlc_{pair_url}", sqlalchemy_conn_str, if_exists="append", index=False
-        )
+        if new_ohlc is not None:
+            new_ohlc_df = pd.DataFrame(new_ohlc)
+            new_ohlc_df["timestamp"] = new_ohlc_df["timestamp"].apply(to_int)
+            new_ohlc_df["high"] = new_ohlc_df["high"].apply(to_float)
+            new_ohlc_df["open"] = new_ohlc_df["open"].apply(to_float)
+            new_ohlc_df["low"] = new_ohlc_df["low"].apply(to_float)
+            new_ohlc_df["close"] = new_ohlc_df["close"].apply(to_float)
+            new_ohlc_df["volume"] = new_ohlc_df["volume"].apply(to_float)
+            new_ohlc_df["timestamp"] = new_ohlc_df["timestamp"].apply(to_timestamp)
+            new_ohlc_df["unique_pair_id"] = row[1].values[0]
+            print(f"Updating database for: {row[1].values[0]} {pair_url}")
+            new_ohlc_df.to_sql(
+                f"ohlc_{pair_url}", sqlalchemy_conn_str, if_exists="append", index=False
+            )
+        else:
+            continue
+
+
+def set_trading_status_to_disabled(market_symbol):
+    update_status_query = """--sql
+        update bitstamp_pairs
+        set trading_enabled = FALSE,
+        where pair_url = %(pair)s;
+        """
+    with psycopg2.connect(psycopg_conn_str) as conn:
+        cur = conn.cursor()
+        cur.execute(update_status_query, {"pair": market_symbol})
+        conn.commit()
+        cur.close()
 
 
 iterate_through_pairs_df_for_new_data()
