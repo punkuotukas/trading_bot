@@ -56,7 +56,7 @@ def retrieve_trading_status_from_db():
     return db_df
 
 
-# ? existing pairs in database are checked for trading status on api - if enabled on api and was enabled on db, update query for last check date to database is executed, if disabled on api and was enabled on api, update query for last check and trading status is executed. Same in case was disabled on db and enabled on api.
+# ? existing pairs in database are checked for trading status on api - if enabled on api and was enabled on db, update query for last check date to database is executed, if disabled on db and was enabled on api, update query for last check and trading status is executed. Same in case was disabled on db and enabled on api.
 def update_db_pairs_status_based_on_api_data():
     status_updates = []
     disabled_pairs = []
@@ -123,7 +123,7 @@ def update_db_pairs_status_based_on_api_data():
             print(f"Trading status updated for: {pair["name"]}")
             status_updates.append(pair["name"])
     [disabled_pairs.append(pair) for pair in df["pairs"] if pair not in api_pairs_list]
-    for pair in disabled_pairs:
+    for pair in disabled_pairs[:]:
         if df.loc[df["pairs"] == pair, "status"].values[0] == False:
             disabled_pairs.remove(pair)
     if len(disabled_pairs) > 0 or len(status_updates) > 0:
