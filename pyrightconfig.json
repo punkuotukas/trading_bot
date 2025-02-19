@@ -1,0 +1,10 @@
+{
+    "reportArgumentType": "none",
+    "reportPossiblyUnboundVariable": "none",
+    "reportAttributeAccessIssue": "none",
+    "reportOptionalSubscript": "none",
+    "reportMissingTypeStubs": "none",
+    "reportUnusedCallResult": "none",
+    "reportIndexIssue": "none",
+    "verboseOutput": true
+}
