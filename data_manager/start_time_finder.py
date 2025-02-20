@@ -9,15 +9,15 @@ from typing import Dict
 import requests
 import pytz
 import psycopg
+from .data_helper import DataHelper
 
-fur_time = datetime.datetime.now(
-    pytz.timezone("Europe/Vilnius")).replace(microsecond=0)
-cur_unix_time = int(time.time())
 FOUR_WEEK_INTERVAL = 60 * 60 * 24 * 7 * 4
 ONE_WEEK_INTERVAL = 60 * 60 * 24 * 7
 ONE_DAY_INTERVAL = 60 * 60 * 24
 ONE_HOUR_INTERVAL = 60 * 60
 ONE_MINUTE_INTERVAL = 60
+
+DataHelper = DataHelper()
 
 
 class StartTimeFinder:
@@ -26,6 +26,10 @@ class StartTimeFinder:
     it is needed to find the starting timestamp for each pair
     functions in this class deal with searching for it.
     """
+    def __init__(self) -> None:
+        self.fur_time = datetime.datetime.now(pytz.timezone(
+            "Europe/Vilnius")).replace(microsecond=0)
+        self.cur_unix_time = int(time.time())
 
     def get_candle(self, market_symbol, start, limit=1) -> list[Dict]:
         """
@@ -37,33 +41,37 @@ class StartTimeFinder:
         results = resp.json()
         return results["data"]["ohlc"]
 
-    def find_starting_timestamp(self, market_symbol) -> str|None:
+    @property
+    def find_starting_timestamp_for_new_pairs(self) -> str|None:
         """
         Searches for the precise minute when trading of a pair started
         by narrowing down time window gradually
         """
-        start: int|None = cur_unix_time - ONE_WEEK_INTERVAL
-        # Step 1: Find first non-empty result (move forward by one day)
-        start  = self.find_non_empty_timestamp(market_symbol,
-                                              start,
-                                              ONE_DAY_INTERVAL,
-                                              increase=True)
-        if start is None:
-            return None
-        # Step 2: Narrow down to the hour
-        start = self.find_non_empty_timestamp(market_symbol,
-                                              start,
-                                              ONE_HOUR_INTERVAL,
-                                              increase=False)
-        if start is None:
-            return None
-        # Step 3: Refine to the exact minute
-        start = self.find_non_empty_timestamp(market_symbol,
-                                              start,
-                                              ONE_MINUTE_INTERVAL,
-                                              increase=True)
-        # Final check: return the timestamp
-        results = self.get_candle(market_symbol, start)
+        pairs = DataHelper.retrieve_pairs_without_start_timestamp
+        # pylint: disable=not-an-iterable
+        for market_symbol in pairs:
+            start: int|None = self.cur_unix_time - ONE_WEEK_INTERVAL
+            # Step 1: Find first non-empty result (move forward by one day)
+            start  = self.find_non_empty_timestamp(market_symbol,
+                                                  start,
+                                                  ONE_DAY_INTERVAL,
+                                                  increase=True)
+            if start is None:
+                return None
+            # Step 2: Narrow down to the hour
+            start = self.find_non_empty_timestamp(market_symbol,
+                                                  start,
+                                                  ONE_HOUR_INTERVAL,
+                                                  increase=False)
+            if start is None:
+                return None
+            # Step 3: Refine to the exact minute
+            start = self.find_non_empty_timestamp(market_symbol,
+                                                  start,
+                                                  ONE_MINUTE_INTERVAL,
+                                                  increase=True)
+            # Final check: return the timestamp
+            results = self.get_candle(market_symbol, start)
         return results[0]["timestamp"] if results else None
 
     def find_non_empty_timestamp(self,

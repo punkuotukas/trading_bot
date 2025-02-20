@@ -134,7 +134,7 @@ class DataHelper:
             cur = conn.cursor()
             cur.execute(
                 update_check_time_query,
-                {"cur_time": self.cur_time, "pair": pair["url_symbol"]},
+                {"cur_time": self.cur_time, "pair": pair},
             )
             conn.commit()
 
@@ -161,7 +161,7 @@ class DataHelper:
         print(f"Trading status has been set to 'DISABLED' for: {pair}")
 
 
-    def create_new_pair_table(self, connection, pair) -> None:
+    def create_new_pair_table(self, conn, pair) -> None:
         """
         creates a new single pair table within DB
         """
@@ -190,43 +190,37 @@ class DataHelper:
         END $$;
         """
         # pylint: disable = not-context-manager
-        with psycopg.connect(connection) as conn:
-            cur = conn.cursor()
-            cur.execute(create_table_query)
-            cur.execute(create_hypertable_query)
-            conn.commit()
-            print(f"New DB table created for {pair}")
-            cur.close()
+        cur = conn.cursor()
+        cur.execute(create_table_query)
+        cur.execute(create_hypertable_query)
+        print(f"New DB table created for {pair}")
 
 
-    def insert_new_pairs_to_main_table(self, new_pairs: list[str]) -> None:
+    def insert_new_pairs_to_main_table(self, new_pairs: list[dict]) -> None:
         """
         In case during trading status for pairs check new pairs are detected,
         this function will insert them into bitstamp_pairs table
         """
         insert_new_pair_query = """--sql
         INSERT into bitstamp_pairs(pair,
-                                   unix_timestamp,
                                    pair_url,
                                    trading_enabled,
                                    "description",
                                    minimum_order)
         VALUES (%(pair_name)s,
-        %(unix_timestamp)s,
         %(pair_url)s,
         TRUE,
         %(description)s,
         %(minimum_order)s)
         """
         check_query = """--sql
-        SELECT 1 FROM bitstamp_pairs WHERE pair = %(pair)s
+        SELECT 1 FROM bitstamp_pairs WHERE pair_url = %(pair)s
         """
         # pylint:disable = not-context-manager
         with psycopg.connect(self.psycopg_conn_str) as conn:
             for pair in new_pairs:
-                pair["unix_timestamp"] = self.cur_unix_time
                 cur = conn.cursor()
-                cur.execute(check_query, {"pair": pair["name"]})
+                cur.execute(check_query, {"pair": pair["url_symbol"]})
                 exists = cur.fetchone()
                 if not exists:
                     try:
@@ -234,19 +228,17 @@ class DataHelper:
                             insert_new_pair_query,
                             {
                                 "pair_name": pair["name"],
-                                "unix_timestamp": pair["unix_timestamp"],
                                 "pair_url": pair["url_symbol"],
                                 "description": pair["description"],
                                 "minimum_order": pair["minimum_order"],
                             },
                         )
-                        self.update_check_time(pair)
+                        self.update_check_time(pair["url_symbol"])
+                        self.create_new_pair_table(conn, pair["url_symbol"])
                         conn.commit()
-                        self.create_new_pair_table(conn, pair)
                         cur.close()
                         print(
-                            f"""pair {pair["name"]} has been
-                            added to bitstamp_pairs table""")
+                            f"""pair {pair["name"]} has been added to bitstamp_pairs table""")
                     except psycopg.errors.UniqueViolation as e:
                         print(e)
                         print(f"pair {pair["name"]} already exists in the table")
@@ -263,3 +255,26 @@ class DataHelper:
         self.sqlalchemy_conn_str,
         if_exists="append",
         index=False)
+
+
+    @property
+    def retrieve_pairs_without_start_timestamp(self) -> list[str]:
+        """
+        placeholder
+        """
+        pairs_without_timestamp: list[str] = []
+        pairs_without_timestamp_query = """--sql
+                SELECT
+                pair_url
+                FROM bitstamp_pairs
+                WHERE
+                start_timestamp IS NULL;
+                """
+        # pylint: disable=not-context-manager
+        with psycopg.connect(self.psycopg_conn_str) as conn:
+            cur = conn.cursor()
+            cur.execute(pairs_without_timestamp_query)
+            results = cur.fetchall()
+            conn.commit()
+            pairs_without_timestamp = [pair[0] for pair in results]
+        return pairs_without_timestamp

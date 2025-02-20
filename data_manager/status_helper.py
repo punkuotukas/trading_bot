@@ -13,7 +13,7 @@ from .data_helper import DataHelper
 
 load_dotenv()
 
-API_URL = "https://www.bitstamp.net/api/v2/trading-pairs-info/"
+API_PAIRS_URL = "https://www.bitstamp.net/api/v2/trading-pairs-info/"
 cur_time = datetime.datetime.now(pytz.timezone(
     "Europe/Vilnius")).replace(microsecond=0)
 cur_unix_time = int(time.mktime(cur_time.timetuple()))
@@ -26,24 +26,21 @@ def check_for_new_pairs() -> None:
     Plus, updates DB table for las_checked_for_trading column
     for all pairs that API returned as traded
     """
-    db_df = DataHelper.retrieve_trading_status_from_db
+    db_df = DataHelper().retrieve_trading_status_from_db
     # pylint: disable=unsubscriptable-object
-    enabled_db_pairs = db_df.loc[db_df["status"] is True, "pairs"].to_list()
-    resp = requests.get(API_URL, timeout=(3, None))
+    # pylint: disable=singleton-comparison
+    enabled_db_pairs = db_df.loc[db_df["trading_enabled"] == True, "pair_url"].to_list()
+    resp = requests.get(API_PAIRS_URL, timeout=(3, None))
     api_results = resp.json()
-    api_pairs_list = [pair["url_symbol"]
-                      for pair in api_results if pair is not None]
-    if len(api_pairs_list) > len(enabled_db_pairs):
-        new_pairs_list: list[str] = []
+    if len(api_results) > len(enabled_db_pairs):
         print("New trading pairs have been launched")
-        new_pairs = set(api_pairs_list) - set(enabled_db_pairs)
+        new_pairs = [pair for pair in api_results if pair["url_symbol"] not in enabled_db_pairs]
         print("New pairs are the following:")
-        print(new_pairs)
+        new_pairs_list = [pair["url_symbol"] for pair in new_pairs]
+        print(new_pairs_list)
         for pair in api_results:
-            DataHelper().update_check_time(pair)
-            if pair["url_symbol"] in new_pairs:
-                new_pairs_list.append(pair)
-        DataHelper().insert_new_pairs_to_main_table(new_pairs_list)
+            DataHelper().update_check_time(pair["url_symbol"])
+        DataHelper().insert_new_pairs_to_main_table(new_pairs)
 
 def update_disabled_pairs() -> None:
     """
@@ -54,7 +51,7 @@ def update_disabled_pairs() -> None:
     """
     existing_pairs = DataHelper.retrieve_trading_status_from_db
     api_pairs: list[str] = []
-    api_data = requests.get(url=API_URL, timeout=(3, None)).json()
+    api_data = requests.get(url=API_PAIRS_URL, timeout=(3, None)).json()
     for pair in api_data:
         api_pairs.append(pair["url_symbol"])
     # pylint: disable=unsubscriptable-object

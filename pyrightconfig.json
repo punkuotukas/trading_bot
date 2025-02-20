@@ -1,4 +1,5 @@
 {
+    "reportGeneralTypeIssues": "none",
     "reportArgumentType": "none",
     "reportPossiblyUnboundVariable": "none",
     "reportAttributeAccessIssue": "none",
