@@ -278,3 +278,33 @@ class DataHelper:
             conn.commit()
             pairs_without_timestamp = [pair[0] for pair in results]
         return pairs_without_timestamp
+
+
+    def update_start_timestamp_in_main_table(
+        self, timestamp, unix_timestamp, connection, pair
+    ):
+        """
+        updates trading start time for specific trading pair
+        in the bitstamp_pairs table in DB
+        """
+        update_start_timestamp_query = """--sql
+        UPDATE bitstamp_pairs
+        SET start_timestamp = %(timestamp)s,
+            unix_timestamp = %(unix_timestamp)s
+        WHERE
+            pair_url = %(pair_url)s
+        """
+        # pylint:disable=not-context-manager
+        with psycopg.connect(connection) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                update_start_timestamp_query,
+                {
+                    "timestamp": timestamp,
+                    "unix_timestamp": unix_timestamp,
+                    "pair_url": pair,
+                },
+            )
+            conn.commit()
+            print(f"Start timestamp updated for: {pair}")
+            cur.close()
