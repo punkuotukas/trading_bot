@@ -49,14 +49,20 @@ def update_disabled_pairs() -> None:
     disable trading status function is executed.
     Plus, last_checked_for_trading column value is updated with current time
     """
-    existing_pairs = DataHelper.retrieve_trading_status_from_db
+    existing_pairs: pd.DataFrame = DataHelper().retrieve_trading_status_from_db
     api_pairs: list[str] = []
     api_data = requests.get(url=API_PAIRS_URL, timeout=(3, None)).json()
     for pair in api_data:
         api_pairs.append(pair["url_symbol"])
     # pylint: disable=unsubscriptable-object
-    disabled_pairs: pd.DataFrame = existing_pairs.loc[~existing_pairs['pair_url'].isin(api_pairs),
+    disabled_pairs = existing_pairs.loc[(~existing_pairs['pair_url'].isin(api_pairs))
+    & (existing_pairs['trading_enabled'] is True),
     ['pair_url', 'trading_enabled', 'last_checked_for_trading']]
-    for pair in disabled_pairs['pair_url']:
-        DataHelper().disable_trading_on_db(pair)
-        DataHelper().update_check_time(pair)
+    if not disabled_pairs.empty:
+        print("disabled pairs:")
+        print(disabled_pairs)
+        for pair in disabled_pairs['pair_url']:
+            DataHelper().disable_trading_on_db(pair)
+            DataHelper().update_check_time(pair)
+    elif disabled_pairs.empty:
+        print("None of previously traded pairs were disabled since the last check.")

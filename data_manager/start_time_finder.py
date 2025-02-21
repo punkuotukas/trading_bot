@@ -11,6 +11,7 @@ import pytz
 import psycopg
 from .data_helper import DataHelper
 
+FOUR_MONTH_INTERVAL = 60 * 60 * 24 * 7 * 4 * 4
 FOUR_WEEK_INTERVAL = 60 * 60 * 24 * 7 * 4
 ONE_WEEK_INTERVAL = 60 * 60 * 24 * 7
 ONE_DAY_INTERVAL = 60 * 60 * 24
@@ -41,53 +42,44 @@ class StartTimeFinder:
         results = resp.json()
         return results["data"]["ohlc"]
 
-    @property
-    def find_starting_timestamp_for_new_pairs(self) -> str|None:
+
+    def find_starting_timestamp_for_new_pairs(self) -> dict[str, int] | None:
         """
-        Searches for the precise minute when trading of a pair started
-        by narrowing down time window gradually
+        Finds the first trading minute of a pair with minimal API calls.
+        Uses large intervals first, then binary search for precision.
+        Returns a dictionary {market_symbol: first_trade_timestamp}.
         """
         pairs = DataHelper.retrieve_pairs_without_start_timestamp
-        # pylint: disable=not-an-iterable
+        starting_timestamps = {}
         for market_symbol in pairs:
-            start: int|None = self.cur_unix_time - ONE_WEEK_INTERVAL
-            # Step 1: Find first non-empty result (move forward by one day)
-            start  = self.find_non_empty_timestamp(market_symbol,
-                                                  start,
-                                                  ONE_DAY_INTERVAL,
-                                                  increase=True)
-            if start is None:
-                return None
-            # Step 2: Narrow down to the hour
-            start = self.find_non_empty_timestamp(market_symbol,
-                                                  start,
-                                                  ONE_HOUR_INTERVAL,
-                                                  increase=False)
-            if start is None:
-                return None
-            # Step 3: Refine to the exact minute
-            start = self.find_non_empty_timestamp(market_symbol,
-                                                  start,
-                                                  ONE_MINUTE_INTERVAL,
-                                                  increase=True)
-            # Final check: return the timestamp
-            results = self.get_candle(market_symbol, start)
-        return results[0]["timestamp"] if results else None
+            print(f"Searching for starting timestamp of {market_symbol}")
+            low = 1726292210  # 2024-09-14 09:36:50+03 (earliest known complete data)
+            high = self.cur_unix_time
+            step = FOUR_WEEK_INTERVAL  # Start with large steps
+            # Step 1: Find the first non-empty region using exponential search
+            while low < high:
+                results = self.get_candle(market_symbol, low)
+                if results:
+                    break  # Found a valid region, now narrow down
+                low += step  # Move forward in time
+                step = max(step // 2, ONE_DAY_INTERVAL)  # Reduce step gradually
+            # Step 2: Binary search within the found non-empty region
+            high = low  # Now high is the first known valid timestamp
+            low -= step  # Step back a bit to make sure we include the first trade
+            while low < high:
+                mid = (low + high) // 2
+                results = self.get_candle(market_symbol, mid)
+                if results:
+                    high = mid  # Move left to find earlier candles
+                else:
+                    low = mid + ONE_MINUTE_INTERVAL  # Move right
+            # Final validation: Store the first non-empty timestamp
+            results = self.get_candle(market_symbol, low)
+            if results:
+                starting_timestamps[market_symbol] = results[0]["timestamp"]
+                print(f"Starting timestamp: {results[0]["timestamp"]}")
+        return starting_timestamps if starting_timestamps else None
 
-    def find_non_empty_timestamp(self,
-                                 market_symbol:str,
-                                 start:int,
-                                 step:int,
-                                 increase:bool) -> int|None:
-        """
-        Moves forward or backward in time
-        to find the first non-empty candle result
-        """
-        results = self.get_candle(market_symbol, start)
-        while not results if increase else results:
-            start += step if increase else -step
-            results: list[Dict] = self.get_candle(market_symbol, start)
-        return start if results else None
 
     def update_start_timestamp_in_main_table(
         self, timestamp, unix_timestamp, connection, pair

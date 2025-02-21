@@ -15,8 +15,9 @@ def main():
     """
     main method
     """
-    # status_helper.check_for_new_pairs()
-    StartTimeFinder.find_starting_timestamp_for_new_pairs
+    status_helper.check_for_new_pairs()
+    status_helper.update_disabled_pairs()
+    # StartTimeFinder.find_starting_timestamp_for_new_pairs()
     # api_data_manager.update_candles_for_existing_pairs()
 
 if __name__ == "__main__":
