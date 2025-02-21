@@ -2,12 +2,10 @@
 main module
 """
 from data_manager import (
-    data_helper,
     api_data_manager,
     status_helper,
 )
 
-DataHelper = data_helper.DataHelper()
 APIDataManager = api_data_manager.APIDataManager()
 
 def main():
