@@ -8,6 +8,7 @@ from datetime import datetime
 import requests
 from dotenv import load_dotenv
 import pandas as pd
+import psycopg
 from data_manager.data_helper import DataHelper
 
 load_dotenv()
@@ -57,7 +58,7 @@ class APIDataManager:
         placeholder
         """
         start_df = DataHelper().retrieve_df_with_last_candle(pair)
-        start: int = start_df["unix_timestamp"].values[0] + 60
+        start: int = start_df["unix_timestamp"].values[0]
         ohlc_list: list[dict] = []
         while start < cur_unix_time - 60:
             try:
@@ -160,7 +161,13 @@ class APIDataManager:
                     low = mid + ONE_MINUTE_INTERVAL  # Move right
             # Final validation: Store the first non-empty timestamp
             results = self.get_candle(market_symbol, low)
+            readable_timestamp = datetime.fromtimestamp(int(results[0]["timestamp"]))
             if results:
                 starting_timestamps[market_symbol] = results[0]["timestamp"]
-                print(f"Starting timestamp: {results[0]["timestamp"]}")
+                unix_timestamp = results[0]["timestamp"]
+                print(f"{market_symbol}: {results[0]["timestamp"]} -> {readable_timestamp}")
+                DataHelper().update_start_timestamp_in_main_table(pair=market_symbol,
+                                                                  timestamp=readable_timestamp,
+                                                                  unix_timestamp=unix_timestamp,
+                                                                  connection=self.psycopg_conn_str)
         return starting_timestamps if starting_timestamps else None

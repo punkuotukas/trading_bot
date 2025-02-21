@@ -41,6 +41,8 @@ def check_for_new_pairs() -> None:
         for pair in api_results:
             DataHelper().update_check_time(pair["url_symbol"])
         DataHelper().insert_new_pairs_to_main_table(new_pairs)
+    else:
+        print("No new pairs have been launched since the last check")
 
 def update_disabled_pairs() -> None:
     """

@@ -10,6 +10,7 @@ import psycopg
 from psycopg import sql
 import pytz
 import pandas as pd
+import numpy as np
 
 load_dotenv()
 
@@ -52,27 +53,45 @@ class DataHelper:
         ORDER BY timestamp DESC
         LIMIT 1;
         """).format(sql.Identifier(f"ohlc_{pair}"))
+        start_timestamp_query = sql.SQL("""--sql
+        SELECT unix_timestamp
+        FROM bitstamp_pairs
+        WHERE pair_url = {}
+        """).format(sql.Literal(pair))
         # pylint: disable=not-context-manager
         with psycopg.connect(self.psycopg_conn_str) as conn:
             cur = conn.cursor()
             cur.execute(last_candle_query)
             results = cur.fetchone()
+            if results is not None:
+                single_candle_df = pd.DataFrame(results).T
+                single_candle_df.rename(columns={0: "unix_timestamp",
+                                                 1: "open",
+                                                 2: "high",
+                                                 3: "low",
+                                                 4: "close",
+                                                 5: "volume"},
+                                        inplace=True)
+                single_candle_df["unix_timestamp"] = pd.to_datetime(
+                    single_candle_df["unix_timestamp"]).dt.tz_convert("UTC").dt.floor("s")
+                single_candle_df["unix_timestamp"] = single_candle_df[
+                    "unix_timestamp"].astype("int64") // 10**9
+                single_candle_df["unix_timestamp"] += 60
+                return single_candle_df
+            if results is None:
+                cur.execute(start_timestamp_query)
+                results = cur.fetchone()[0]
+                single_candle_df = pd.DataFrame({"unix_timestamp": results,
+                                                 "open": np.nan,
+                                                 "high": np.nan,
+                                                 "low": np.nan,
+                                                 "close": np.nan,
+                                                 "volume": np.nan},
+                                                index=[0])
+                return single_candle_df
             conn.commit()
             cur.close()
-        single_candle_df = pd.DataFrame(results).T
-        single_candle_df.rename(columns={0: "unix_timestamp",
-                                         1: "open",
-                                         2: "high",
-                                         3: "low",
-                                         4: "close",
-                                         5: "volume"},
-                                inplace=True)
-        single_candle_df["unix_timestamp"] = pd.to_datetime(
-            single_candle_df["unix_timestamp"]).dt.tz_convert("UTC").dt.floor("s")
-        single_candle_df["unix_timestamp"] = single_candle_df[
-            "unix_timestamp"].astype("int64") // 10**9
-        return single_candle_df
-
+        raise ValueError(f"No data found for pair {pair}")
 
     @property
     def retrieve_trading_status_from_db(self) -> pd.DataFrame:
@@ -122,7 +141,7 @@ class DataHelper:
 
     def update_check_time(self, pair: str) -> None:
         """
-        only check time for specific gets updated
+        only check time for specific pair gets updated
         """
         update_check_time_query = """--sql
         UPDATE bitstamp_pairs
@@ -308,3 +327,4 @@ class DataHelper:
             conn.commit()
             print(f"Start timestamp updated for: {pair}")
             cur.close()
+        self.update_check_time(pair)
