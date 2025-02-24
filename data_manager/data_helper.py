@@ -5,6 +5,7 @@ are contained in this module
 import os
 import datetime
 import time
+from loguru import logger
 from dotenv import load_dotenv
 import psycopg
 from psycopg import sql
@@ -177,7 +178,7 @@ class DataHelper:
             conn.commit()
             cur.close()
         self.update_check_time(pair)
-        print(f"Trading status has been set to 'DISABLED' for: {pair}")
+        logger.info(f"Trading status has been set to 'DISABLED' for: {pair}")
 
 
     def create_new_pair_table(self, conn, pair) -> None:
@@ -212,7 +213,7 @@ class DataHelper:
         cur = conn.cursor()
         cur.execute(create_table_query)
         cur.execute(create_hypertable_query)
-        print(f"New DB table created for {pair}")
+        logger.info(f"New DB table created for {pair}")
 
 
     def insert_new_pairs_to_main_table(self, new_pairs: list[dict]) -> None:
@@ -256,11 +257,11 @@ class DataHelper:
                         self.create_new_pair_table(conn, pair["url_symbol"])
                         conn.commit()
                         cur.close()
-                        print(
+                        logger.info(
                             f"""pair {pair["name"]} has been added to bitstamp_pairs table""")
                     except psycopg.errors.UniqueViolation as e:
-                        print(e)
-                        print(f"pair {pair["name"]} already exists in the table")
+                        logger.error(e)
+                        logger.error(f"pair {pair["name"]} already exists in the table")
                     finally:
                         cur.close()
 
@@ -325,6 +326,6 @@ class DataHelper:
                 },
             )
             conn.commit()
-            print(f"Start timestamp updated for: {pair}")
+            logger.info(f"Start timestamp updated for: {pair}")
             cur.close()
         self.update_check_time(pair)

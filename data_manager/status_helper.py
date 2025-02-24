@@ -5,6 +5,7 @@ database and Bitstamp API provided data
 
 import datetime
 import time
+from loguru import logger
 import pandas as pd
 from dotenv import load_dotenv
 import requests
@@ -33,16 +34,16 @@ def check_for_new_pairs() -> None:
     resp = requests.get(API_PAIRS_URL, timeout=(3, None))
     api_results = resp.json()
     if len(api_results) > len(enabled_db_pairs):
-        print("New trading pairs have been launched")
+        logger.info("New trading pairs have been launched")
         new_pairs = [pair for pair in api_results if pair["url_symbol"] not in enabled_db_pairs]
-        print("New pairs are the following:")
+        logger.info("New pairs are the following:")
         new_pairs_list = [pair["url_symbol"] for pair in new_pairs]
-        print(new_pairs_list)
+        logger.info(f"{new_pairs_list}")
         for pair in api_results:
             DataHelper().update_check_time(pair["url_symbol"])
         DataHelper().insert_new_pairs_to_main_table(new_pairs)
     else:
-        print("No new pairs have been launched since the last check")
+        logger.info("No new pairs have been launched since the last check")
 
 def update_disabled_pairs() -> None:
     """
@@ -61,10 +62,10 @@ def update_disabled_pairs() -> None:
     & (existing_pairs['trading_enabled'] is True),
     ['pair_url', 'trading_enabled', 'last_checked_for_trading']]
     if not disabled_pairs.empty:
-        print("disabled pairs:")
-        print(disabled_pairs)
+        logger.info("disabled pairs:")
+        logger.info(f"{disabled_pairs}")
         for pair in disabled_pairs['pair_url']:
             DataHelper().disable_trading_on_db(pair)
             DataHelper().update_check_time(pair)
     elif disabled_pairs.empty:
-        print("None of previously traded pairs were disabled since the last check.")
+        logger.info("None of previously traded pairs were disabled since the last check.")

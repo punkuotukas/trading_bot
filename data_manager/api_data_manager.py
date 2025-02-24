@@ -5,10 +5,10 @@ as new historical data becomes available with time passing
 
 import os
 from datetime import datetime
+from loguru import logger
 import requests
 from dotenv import load_dotenv
 import pandas as pd
-import psycopg
 from data_manager.data_helper import DataHelper
 
 load_dotenv()
@@ -74,9 +74,9 @@ class APIDataManager:
                 )
                 resp.raise_for_status()
             except requests.exceptions.HTTPError:
-                print(f"Bad status code for {pair}")
+                logger.error(f"Bad status code for {pair}")
                 if resp.status_code == 404:
-                    print(f"Setting pair {pair} trading status to \
+                    logger.info(f"Setting pair {pair} trading status to \
                     DISABLED")
                     DataHelper().disable_trading_on_db(pair)
                     DataHelper().update_check_time(pair)
@@ -110,7 +110,7 @@ class APIDataManager:
                 new_ohlc_df["close"] = new_ohlc_df["close"].apply(self.to_float)
                 new_ohlc_df["volume"] = new_ohlc_df["volume"].apply(self.to_float)
                 new_ohlc_df["unique_pair_id"] = row[1].values[0]
-                print(f"Updating database for: {row[1].values[0]} {pair_url}")
+                logger.info(f"Updating database for: {row[1].values[0]} {pair_url}")
                 DataHelper().insert_candles_to_db(new_ohlc_df, pair_url)
                 DataHelper().update_check_time(pair_url)
             else:
@@ -138,7 +138,7 @@ class APIDataManager:
         starting_timestamps = {}
         # pylint: disable=not-an-iterable
         for market_symbol in pairs:
-            print(f"Searching for starting timestamp of {market_symbol}")
+            logger.info(f"Searching for starting timestamp of {market_symbol}")
             low = 1726292210  # 2024-09-14 09:36:50+03 (earliest known complete data)
             high = cur_unix_time
             step = FOUR_WEEK_INTERVAL  # Start with large steps
@@ -165,7 +165,7 @@ class APIDataManager:
             if results:
                 starting_timestamps[market_symbol] = results[0]["timestamp"]
                 unix_timestamp = results[0]["timestamp"]
-                print(f"{market_symbol}: {results[0]["timestamp"]} -> {readable_timestamp}")
+                logger.info(f"{market_symbol}: {results[0]["timestamp"]} -> {readable_timestamp}")
                 DataHelper().update_start_timestamp_in_main_table(pair=market_symbol,
                                                                   timestamp=readable_timestamp,
                                                                   unix_timestamp=unix_timestamp,
