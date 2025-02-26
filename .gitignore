@@ -15,3 +15,5 @@ zipline.yml
 notebooks/
 .DS_Store
 .flake8
+*.log
+*.bak
